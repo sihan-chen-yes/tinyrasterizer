@@ -1,8 +1,14 @@
+//
+// Created by csh on 2/26/25.
+// tga image handling
+//
+#ifndef TINYRENDERER_TGAIMAGE_H
+#define TINYRENDERER_TGAIMAGE_H
 #pragma once
 #include <cstdint>
 #include <fstream>
 #include <vector>
-
+// TGA picture rules, can't pad extra bytes
 #pragma pack(push,1)
 struct TGAHeader {
     std::uint8_t  idlength = 0;
@@ -21,8 +27,8 @@ struct TGAHeader {
 #pragma pack(pop)
 
 struct TGAColor {
-    std::uint8_t bgra[4] = {0,0,0,0};
-    std::uint8_t bytespp = 4;
+    std::uint8_t bgra[4] = {0,0,0,0}; // RGBA order
+    std::uint8_t bytespp = 4; // bytes per pixel
     std::uint8_t& operator[](const int i) { return bgra[i]; }
 };
 
@@ -31,7 +37,7 @@ struct TGAImage {
     TGAImage() = default;
     TGAImage(const int w, const int h, const int bpp);
     bool  read_tga_file(const std::string filename);
-    bool write_tga_file(const std::string filename, const bool vflip=true, const bool rle=true) const;
+    bool write_tga_file(const std::string filename, const bool vflip=true, const bool rle=true) const; // whether use run-length encoding for compression
     void flip_horizontally();
     void flip_vertically();
     TGAColor get(const int x, const int y) const;
@@ -39,10 +45,10 @@ struct TGAImage {
     int width()  const;
     int height() const;
 private:
-    bool   load_rle_data(std::ifstream &in);
-    bool unload_rle_data(std::ofstream &out) const;
+    bool   load_rle_data(std::ifstream &in); //decompression
+    bool unload_rle_data(std::ofstream &out) const; //compression
     int w = 0, h = 0;
     std::uint8_t bpp = 0;
     std::vector<std::uint8_t> data = {};
 };
-
+#endif //TINYRENDERER_TGAIMAGE_H

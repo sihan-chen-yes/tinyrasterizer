@@ -1,3 +1,7 @@
+//
+// Created by csh on 2/26/25.
+// tga image handling
+//
 #include <iostream>
 #include <cstring>
 #include "tgaimage.h"
@@ -27,12 +31,14 @@ bool TGAImage::read_tga_file(const std::string filename) {
     size_t nbytes = bpp*w*h;
     data = std::vector<std::uint8_t>(nbytes, 0);
     if (3==header.datatypecode || 2==header.datatypecode) {
+        // uncompressed
         in.read(reinterpret_cast<char *>(data.data()), nbytes);
         if (!in.good()) {
             std::cerr << "an error occured while reading the data\n";
             return false;
         }
     } else if (10==header.datatypecode||11==header.datatypecode) {
+        // compressed, need to decompress
         if (!load_rle_data(in)) {
             std::cerr << "an error occured while reading the data\n";
             return false;
@@ -41,8 +47,10 @@ bool TGAImage::read_tga_file(const std::string filename) {
         std::cerr << "unknown file format " << (int)header.datatypecode << "\n";
         return false;
     }
+    // 1 means from up to bottom
     if (!(header.imagedescriptor & 0x20))
         flip_vertically();
+    // 1 means from right to left
     if (header.imagedescriptor & 0x10)
         flip_horizontally();
     std::cerr << w << "x" << h << "/" << bpp*8 << "\n";
@@ -61,8 +69,11 @@ bool TGAImage::load_rle_data(std::ifstream &in) {
             std::cerr << "an error occured while reading the data\n";
             return false;
         }
+        // hardcoded 128 (8 bits), TGA RLE rules
         if (chunkheader<128) {
+            // if starts with 0 for the highest bit in the chunkheader, then the chunk is uncompressed
             chunkheader++;
+            // left bits for chunk size
             for (int i=0; i<chunkheader; i++) {
                 in.read(reinterpret_cast<char *>(colorbuffer.bgra), bpp);
                 if (!in.good()) {
@@ -78,7 +89,9 @@ bool TGAImage::load_rle_data(std::ifstream &in) {
                 }
             }
         } else {
+            // if starts with 1 for highest bit in the chunkheader, then the next color in the chunk will repeat for N times
             chunkheader -= 127;
+            // left bits for repeating times
             in.read(reinterpret_cast<char *>(colorbuffer.bgra), bpp);
             if (!in.good()) {
                 std::cerr << "an error occured while reading the header\n";
@@ -139,24 +152,30 @@ bool TGAImage::unload_rle_data(std::ofstream &out) const {
     while (curpix<npixels) {
         size_t chunkstart = curpix*bpp;
         size_t curbyte = curpix*bpp;
+        // peeked pixel number
         std::uint8_t run_length = 1;
         bool raw = true;
         while (curpix+run_length<npixels && run_length<max_chunk_length) {
             bool succ_eq = true;
+            // comparing pixel
             for (int t=0; succ_eq && t<bpp; t++)
                 succ_eq = (data[curbyte+t]==data[curbyte+t+bpp]);
             curbyte += bpp;
+            // uncompress mode
             if (1==run_length)
                 raw = !succ_eq;
+            // encounter repeating pixel, should end current uncompress mode
             if (raw && succ_eq) {
                 run_length--;
                 break;
             }
+            // encounter different pixel, should end current compress mode
             if (!raw && !succ_eq)
                 break;
             run_length++;
         }
         curpix += run_length;
+        // chunkheader record
         out.put(raw ? run_length-1 : run_length+127);
         if (!out.good()) return false;
         out.write(reinterpret_cast<const char *>(data.data()+chunkstart), (raw?run_length*bpp:bpp));
@@ -173,6 +192,7 @@ TGAColor TGAImage::get(const int x, const int y) const {
     return ret;
 }
 
+// const & prevent changing inside function
 void TGAImage::set(int x, int y, const TGAColor &c) {
     if (!data.size() || x<0 || y<0 || x>=w || y>=h) return;
     memcpy(data.data()+(x+y*w)*bpp, c.bgra, bpp);
