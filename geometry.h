@@ -5,6 +5,7 @@
 #ifndef TINYRENDERER_GEOMETRY_H
 #define TINYRENDERER_GEOMETRY_H
 #include <cmath>
+#define EPSILON 1e-6
 
 template <class t> struct Vec2 {
     union {
