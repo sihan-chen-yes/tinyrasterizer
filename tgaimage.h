@@ -27,9 +27,18 @@ struct TGAHeader {
 #pragma pack(pop)
 
 struct TGAColor {
-    std::uint8_t bgra[4] = {0,0,0,0}; // RGBA order
+    std::uint8_t bgra[4] = {0, 0, 0, 0}; // BGRA order
     std::uint8_t bytespp = 4; // bytes per pixel
     std::uint8_t& operator[](const int i) { return bgra[i]; }
+
+    TGAColor() {}
+    TGAColor(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255, std::uint8_t bpp = 4)
+            : bgra{b, g, r, a}, bytespp(bpp) {
+    }
+
+    TGAColor(int r, int g, int b, int a = 255, std::uint8_t bpp = 4)
+            : bgra{static_cast<std::uint8_t> (b), static_cast<std::uint8_t> (g), static_cast<std::uint8_t> (r), static_cast<std::uint8_t> (a)}, bytespp(bpp) {
+    }
 };
 
 struct TGAImage {

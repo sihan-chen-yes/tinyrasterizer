@@ -10,11 +10,11 @@
 #include "model.h"
 #include "geometry.h"
 
-constexpr TGAColor white   = {255, 255, 255, 255}; // attention, BGRA order
-constexpr TGAColor green   = {  0, 255,   0, 255};
-constexpr TGAColor red     = {  0,   0, 255, 255};
-constexpr TGAColor blue    = {255, 128,  64, 255};
-constexpr TGAColor yellow  = {  0, 200, 255, 255};
+TGAColor white   = TGAColor (255, 255, 255, 255); // attention, BGRA order
+TGAColor green   = TGAColor (  0, 255,   0, 255);
+TGAColor red     = TGAColor (  255,   0, 0, 255);
+TGAColor blue    = TGAColor (64, 128,  255, 255);
+TGAColor yellow  = TGAColor (  255, 200, 0, 255);
 Model *model = NULL;
 const int width  = 800;
 const int height = 800;
@@ -251,9 +251,7 @@ void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
 //            screen_coords[j] = Vec2i((world_coords.x + 1) * image.width() / 2.,
 //                                     (world_coords.y + 1) * image.height() / 2.);
 //        }
-//        TGAColor rand_color = TGAColor {static_cast<uint8_t>(rand() % 255),
-//                                        static_cast<uint8_t>(rand() % 255),
-//                                        static_cast<uint8_t>(rand() % 255), 255};
+//        TGAColor rand_color = TGAColor(rand() % 255, rand() % 255, rand() % 255, 255);
 //        triangle(screen_coords, image, rand_color);
 //    }
 //
@@ -289,11 +287,7 @@ int main(int argc, char** argv) {
         // reverse light direction and calculate cos theta
         float cosTheta = n * (light_dir * -1);
         if (cosTheta > 0) {
-            triangle(screen_coords, image,
-                     TGAColor{static_cast<uint8_t>(cosTheta * 255),
-                              static_cast<uint8_t>(cosTheta * 255),
-                              static_cast<uint8_t>(cosTheta * 255),
-                              255});
+            triangle(screen_coords, image, TGAColor(cosTheta * 255, cosTheta * 255, cosTheta * 255, 255));
         }
     }
 
