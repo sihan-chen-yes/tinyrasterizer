@@ -16,80 +16,10 @@ TGAColor red     = TGAColor (  255,   0, 0, 255);
 TGAColor blue    = TGAColor (64, 128,  255, 255);
 TGAColor yellow  = TGAColor (  255, 200, 0, 255);
 Model *model = NULL;
+// directional light
+Vec3f direct_light = Vec3f(0, 0, -1);
 const int width  = 800;
 const int height = 800;
-
-// Bresenham Algorithm
-//void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
-//    bool steep = false;
-//    // assuming x direction iteration
-//    if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
-//        // transpose picture
-//        std::swap(x0, y0);
-//        std::swap(x1, y1);
-//        steep = true;
-//    }
-//    // assuming x0 < x1
-//    if (x0 > x1) {
-//        std::swap(x0, x1);
-//        std::swap(y0, y1);
-//    }
-//    for (int x = x0; x <= x1; ++x) {
-//        float t = (float) (x - x0) / (x1 - x0);
-//        int y = y0 + t * (y1 - y0);
-//        if (!steep) {
-//            // didn't transpose
-//            image.set(x, y, color);
-//        } else{
-//            // remember transpose back
-//            image.set(y, x, color);
-//        }
-//    }
-//}
-
-// Bresenham Algorithm Optimization v2
-// remove float completely via transforming the inequality (multiply 2 on both sides)
-void line(Vec2i p0, Vec2i p1, TGAImage &image, TGAColor color) {
-    int x0 = p0.x;
-    int y0 = p0.y;
-    int x1 = p1.x;
-    int y1 = p1.y;
-    bool steep = false;
-    // assuming x direction iteration
-    if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
-        // transpose picture
-        std::swap(x0, y0);
-        std::swap(x1, y1);
-        steep = true;
-    }
-    // assuming x0 < x1
-    if (x0 > x1) {
-        std::swap(x0, x1);
-        std::swap(y0, y1);
-    }
-    // d_x = 1, d_y = k x d_x = k
-    int dy = y1 - y0;
-    int dx = x1 - x0;
-    int d_error = 2 * std::abs(dy);
-    int d_error_total = 0;
-    int y = y0;
-    for (int x = x0; x <= x1; ++x) {
-        if (!steep) {
-            // didn't transpose
-            image.set(x, y, color);
-        } else{
-            // remember transpose back
-            image.set(y, x, color);
-        }
-        d_error_total += d_error;
-        // beyond half grid
-        if (d_error_total > dx) {
-            y += y1 > y0 ? 1 : -1;
-            // should move whole grid (dx * 2)
-            d_error_total -= 2 * dx;
-        }
-    }
-}
 
 Vec3f barycentric(Vec3f *pts, Vec3f P) {
     /*
@@ -115,31 +45,48 @@ Vec3f world2screen(Vec3f v, int width, int height) {
 }
 
 // drawing triangles iterating bbox
-void triangle(Vec3f *pts, float *zbuffer, TGAImage &image, TGAColor* vert_color) {
+void triangle(int i, float *zbuffer, TGAImage &image) {
     /*
-     * pts: in screen coordinates
+     * rasterize i-th face from mesh
      */
+    // fill in i-th face information, including pts, uvs
+    Vec3f screen_coords[3];
+    Vec3f world_coords[3];
+    Vec2f uv_coords[3];
+    for (int j = 0; j < 3; ++j) {
+        world_coords[j] = model->vert(i, j);
+        screen_coords[j] = world2screen(world_coords[j], width, height);
+        uv_coords[j] = model->uv(i, j);
+    }
+    // CCW -> outside direction: normal = AB ^ AC
+    Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
+    normal.normalize();
+    float cos_theta = normal * (direct_light * -1.f);
+    // backculling return directly
+    if (cos_theta <= 0) {
+        return;
+    }
     // find bounding box of a triangle
     Vec2f bboxmin(image.width() - 1, image.height() - 1);
     Vec2f bboxmax(0, 0);
     for (int i = 0; i < 3; ++i) {
-        bboxmin.x = std::max(0.f, std::min(bboxmin.x, pts[i].x));
-        bboxmin.y = std::max(0.f, std::min(bboxmin.y, pts[i].y));
-        bboxmax.x = std::min(image.width() - 1.f, std::max(bboxmax.x, pts[i].x));
-        bboxmax.y = std::min(image.height() - 1.f, std::max(bboxmax.y, pts[i].y));
+        bboxmin.x = std::max(0.f, std::min(bboxmin.x, screen_coords[i].x));
+        bboxmin.y = std::max(0.f, std::min(bboxmin.y, screen_coords[i].y));
+        bboxmax.x = std::min(image.width() - 1.f, std::max(bboxmax.x, screen_coords[i].x));
+        bboxmax.y = std::min(image.height() - 1.f, std::max(bboxmax.y, screen_coords[i].y));
     }
     Vec3f P;
     for (P.y = bboxmin.y; P.y <= bboxmax.y; P.y++) {
         for (P.x = bboxmin.x; P.x <= bboxmax.x ; P.x++) {
-            Vec3f bary_coords = barycentric(pts, P);
+            Vec3f bary_coords = barycentric(screen_coords, P);
             if (bary_coords.x < 0. || bary_coords.y < 0. || bary_coords.z < 0.) continue;
             // depth interpolation
-            P.z = bary_coords.x * pts[0].z + bary_coords.y * pts[1].z + bary_coords.z * pts[2].z;
+            P.z = bary_coords.x * screen_coords[0].z + bary_coords.y * screen_coords[1].z + bary_coords.z * screen_coords[2].z;
             // pytorch3d frame like
             if (P.z > zbuffer[int(P.y * width + P.x)]) {
                 zbuffer[int(P.y * width + P.x)] = P.z;
-                TGAColor color = vert_color[0] * bary_coords.x + vert_color[1] * bary_coords.y + vert_color[2] * bary_coords.z;
-                image.set(P.x, P.y, color);
+                Vec2f uv_P = uv_coords[0] * bary_coords.x + uv_coords[1] * bary_coords.y + uv_coords[2] * bary_coords.z;
+                image.set(P.x, P.y, model->get_color(uv_P) * cos_theta);
             }
         }
     }
@@ -165,8 +112,6 @@ int main(int argc, char** argv) {
     } else {
         model = new Model("obj/african_head.obj");
     }
-    // directional light
-    Vec3f direct_light = Vec3f(0, 0, -1);
 
     TGAImage image(width, height, TGAImage::RGB);
     // zbuffer for min depth recording
@@ -178,28 +123,10 @@ int main(int argc, char** argv) {
     }
 
     for (int i = 0; i < model->nfaces(); ++i) {
-        Vec3f screen_coords[3];
-        Vec3f world_coords[3];
-        for (int j = 0; j < 3; ++j) {
-            world_coords[j] = model->vert(i, j);
-            screen_coords[j] = world2screen(world_coords[j], width, height);
-        }
-        // CCW -> outside direction: normal = AB ^ AC
-        Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
-        normal.normalize();
-        float cos_theta = normal * (direct_light * -1.f);
-
-        if (cos_theta > 0) {
-            TGAColor colors_vert[3];
-            for (int j = 0; j < 3; ++j) {
-                // first interpolate uv then query
-                colors_vert[j] = TGAColor(255, 255, 255, 255) * cos_theta;
-            }
-            triangle(screen_coords, zbuffer, image, colors_vert);
-        }
+        triangle(i, zbuffer, image);
     }
 
-    image.write_tga_file("rasterization_wo_texture.tga");
+    image.write_tga_file("rasterization_w_texture.tga");
     delete model;
     return 0;
 }
