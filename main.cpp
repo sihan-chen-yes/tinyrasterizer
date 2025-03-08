@@ -20,6 +20,48 @@ Model *model = NULL;
 Vec3f direct_light = Vec3f(0, 0, -1);
 const int width  = 800;
 const int height = 800;
+const int depth = 255;
+// camera location
+Vec3f camera(0, 0, 3);
+
+Vec3f m2v(Matrix m) {
+    // matrix form to vector form
+    return Vec3f(m[0][0]/m[3][0], m[1][0]/m[3][0], m[2][0]/m[3][0]);
+}
+
+Matrix v2m(Vec3f v) {
+    // vector form to matrix form
+    Matrix m(4, 1);
+    m[0][0] = v.x;
+    m[1][0] = v.y;
+    m[2][0] = v.z;
+    m[3][0] = 1.f;
+    return m;
+}
+
+Matrix get_view_matrix(int x0, int y0, int w, int h, int d) {
+    /*
+     * construct wolrd2view transformation matrix
+     */
+    Matrix m = Matrix::identity(4);
+    m[0][3] = x0 + w / 2.f;
+    m[1][3] = y0 + h / 2.f;
+    m[2][3] = d / 2.f;
+
+    m[0][0] = w / 2.f;
+    m[1][1] = h / 2.f;
+    m[2][2] = d / 2.f;
+    return m;
+}
+
+Matrix get_projection_matrix(float camera_z) {
+    /*
+     * get perspective get_projection_matrix matrix
+     */
+    Matrix m = Matrix::identity(4);
+    m[3][2] = -1.f / camera_z;
+    return m;
+}
 
 Vec3f barycentric(Vec3f *pts, Vec3f P) {
     /*
@@ -41,7 +83,14 @@ Vec3f world2screen(Vec3f v, int width, int height) {
      * projecting world coordinates to screen coordinates
      */
     // 0.5 for rounding
-    return Vec3f(int((v.x + 1) * width / 2 + 0.5), int((v.y + 1) * height / 2 + 0.5), v.z);
+    // simple orthographic get_projection_matrix
+//    return Vec3f(int((v.x + 1) * width / 2 + 0.5), int((v.y + 1) * height / 2 + 0.5), v.z);
+
+    // simple perspective get_projection_matrix
+    Matrix view = get_view_matrix(width / 8, height / 8, width * 3 / 4, height * 3 / 4, depth);
+    Matrix projection = get_projection_matrix(camera.z);
+    // perspective projection in 3D space then to project to screen
+    return m2v(view * projection * v2m(v));
 }
 
 // drawing triangles iterating bbox
@@ -65,6 +114,12 @@ void triangle(int i, float *zbuffer, TGAImage &image) {
     // backculling return directly
     if (cos_theta <= 0) {
         return;
+    }
+    // round screen_coords to int to meet assumption
+    for (int j = 0; j < 3; ++j) {
+        screen_coords[j].x = float(int(screen_coords[j].x + 0.5));
+        screen_coords[j].y = float(int(screen_coords[j].y + 0.5));
+        screen_coords[j].z = float(int(screen_coords[j].z + 0.5));
     }
     // find bounding box of a triangle
     Vec2f bboxmin(image.width() - 1, image.height() - 1);
@@ -92,20 +147,6 @@ void triangle(int i, float *zbuffer, TGAImage &image) {
     }
 }
 
-void rasterize(Vec2i p0, Vec2i p1, TGAImage &image, TGAColor color, int ybuffer[]) {
-    if (p0.x>p1.x) {
-        std::swap(p0, p1);
-    }
-    for (int x=p0.x; x<=p1.x; x++) {
-        float t = (x-p0.x)/(float)(p1.x-p0.x);
-        int y = p0.y*(1.-t) + p1.y*t;
-        if (ybuffer[x]<y) {
-            ybuffer[x] = y;
-            image.set(x, 0, color);
-        }
-    }
-}
-
 int main(int argc, char** argv) {
     if (2 == argc) {
         model = new Model(argv[1]);
@@ -118,16 +159,40 @@ int main(int argc, char** argv) {
     float *zbuffer = new float[width * height];
     // initialization
     for (int i = 0; i < width * height; ++i) {
-//        zbuffer[i] = -std::numeric_limits<float>::max();
-        zbuffer[i] = std::numeric_limits<float>::lowest();
+        zbuffer[i] = -std::numeric_limits<float>::max();
     }
 
     for (int i = 0; i < model->nfaces(); ++i) {
         triangle(i, zbuffer, image);
     }
 
-    image.write_tga_file("rasterization_w_texture.tga");
+    image.write_tga_file("rasterization_perspective.tga");
+
+    TGAImage zbimage(width, height, TGAImage::GRAYSCALE);
+    // normalize depth, search for max and min valid depth
+    float z_min = std::numeric_limits<float>::max();
+    float z_max = -std::numeric_limits<float>::max();
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            float z = zbuffer[x + y * width];
+            // ensure z is valid, then record
+            if (z > 0.f) {
+                z_min = std::min(z, z_min);
+                z_max = std::max(z, z_max);
+            }
+        }
+    }
+    std::cout << "z_min:" <<  z_min << std::endl;
+    std::cout << "z_max:" << z_max << std::endl;
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+            float z = zbuffer[x + y * width];
+            float z_normalized = (z - z_min) / (z_max - z_min);
+            zbimage.set(x, y, white * z_normalized);
+        }
+    }
+    zbimage.write_tga_file("zbuffer_debug.tga");
+
     delete model;
     return 0;
 }
-
