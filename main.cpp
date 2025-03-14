@@ -156,8 +156,16 @@ void triangle(int i, float *zbuffer, TGAImage &image) {
 
                 // Flat shading
                 // CCW -> outside direction: normal = AB ^ AC
-                Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
-                normal.normalize();
+//                Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
+//                normal.normalize();
+//                float cos_theta = l * normal;
+
+                // Gouraud shading
+//                Vec3f cos_thetas = Vec3f(normals[0] * l, normals[1] * l, normals[2] * l);
+//                float cos_theta = bary_coords * cos_thetas;
+
+                // Blin-Phong shading
+                Vec3f normal = bary_coords.x * normals[0] + bary_coords.y * normals[1] + bary_coords.z * normals[2];
                 float cos_theta = l * normal;
 
                 if (cos_theta >= 0.f) {
@@ -187,7 +195,7 @@ int main(int argc, char** argv) {
         triangle(i, zbuffer, image);
     }
 
-    image.write_tga_file("rasterization_moving_camera.tga");
+    image.write_tga_file("rasterization_P_shading.tga");
 
     TGAImage zbimage(width, height, TGAImage::GRAYSCALE);
     // normalize depth, search for max and min valid depth
