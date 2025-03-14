@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <fstream>
 #include <vector>
+#include "geometry.h"
 // TGA picture rules, can't pad extra bytes
 #pragma pack(push,1)
 struct TGAHeader {

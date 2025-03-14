@@ -17,29 +17,45 @@ TGAColor blue    = TGAColor (64, 128,  255, 255);
 TGAColor yellow  = TGAColor (  255, 200, 0, 255);
 Model *model = NULL;
 // directional light
-Vec3f direct_light = Vec3f(0, 0, -1);
+Vec3f direct_light = Vec3f(-1, 1, -1).normalize();
 const int width  = 800;
 const int height = 800;
 const int depth = 255;
 // camera location
-Vec3f camera(0, 0, 3);
+Vec3f eye(1, 1, 3);
+Vec3f center(0, 0, 0);
+Vec3f up(0, 1, 0);
 
-Vec3f m2v(Matrix m) {
-    // matrix form to vector form
-    return Vec3f(m[0][0]/m[3][0], m[1][0]/m[3][0], m[2][0]/m[3][0]);
+Matrix get_view_matrix(Vec3f e, Vec3f c, Vec3f u) {
+    /*
+     * e: camera location
+     * c: looking at
+     * u: u direction of camera
+     *
+     * return: View matrix to transform world coords to camera coords
+     */
+
+    // find camera local basis to build rotation matrix
+    Vec3f z = (e - c).normalize();
+    // u and z share the same plane
+    Vec3f x = (u ^ z).normalize();
+    // u and y not necessarily aligned
+    Vec3f y = (z ^ x).normalize();
+    // build transformation matrix
+    // M_inv = M.T
+    // R|T inv> R.T|-R.T T
+    Matrix M_inv = Matrix::identity(4);
+    Matrix Tr = Matrix::identity(4);
+    for (int i = 0; i < 3; ++i) {
+        M_inv[0][i] = x[i];
+        M_inv[1][i] = y[i];
+        M_inv[2][i] = z[i];
+        Tr[i][3] = -c[i];
+    }
+    return M_inv * Tr;
 }
 
-Matrix v2m(Vec3f v) {
-    // vector form to matrix form
-    Matrix m(4, 1);
-    m[0][0] = v.x;
-    m[1][0] = v.y;
-    m[2][0] = v.z;
-    m[3][0] = 1.f;
-    return m;
-}
-
-Matrix get_view_matrix(int x0, int y0, int w, int h, int d) {
+Matrix get_viewport_matrix(int x0, int y0, int w, int h, int d) {
     /*
      * construct wolrd2view transformation matrix
      */
@@ -78,19 +94,19 @@ Vec3f barycentric(Vec3f *pts, Vec3f P) {
     return Vec3f(1. - (n.x + n.y) / n.z, n.x / n.z, n.y / n.z);
 }
 
-Vec3f world2screen(Vec3f v, int width, int height) {
+Vec3f world2screen(Vec3f v) {
     /*
-     * projecting world coordinates to screen coordinates
+     * world coordinates to screen coordinates via chains of transformation
      */
-    // 0.5 for rounding
-    // simple orthographic get_projection_matrix
-//    return Vec3f(int((v.x + 1) * width / 2 + 0.5), int((v.y + 1) * height / 2 + 0.5), v.z);
+    // chains of transformation
+    // no world transformation
+//    Matrix model = Matrix::identity(4); // no world transformation
+    Matrix view = get_view_matrix(eye, center, up); // to camera local frame
+    Matrix projection = get_projection_matrix((eye - center).norm()); // projection methods
+    Matrix viewport = get_viewport_matrix(width / 8, height / 8, width * 3 / 4, height * 3 / 4, depth); // to screen coords
 
-    // simple perspective get_projection_matrix
-    Matrix view = get_view_matrix(width / 8, height / 8, width * 3 / 4, height * 3 / 4, depth);
-    Matrix projection = get_projection_matrix(camera.z);
     // perspective projection in 3D space then to project to screen
-    return m2v(view * projection * v2m(v));
+    return Vec3f(viewport * projection * view * Matrix(v));
 }
 
 // drawing triangles iterating bbox
@@ -102,33 +118,22 @@ void triangle(int i, float *zbuffer, TGAImage &image) {
     Vec3f screen_coords[3];
     Vec3f world_coords[3];
     Vec2f uv_coords[3];
+    Vec3f normals[3];
     for (int j = 0; j < 3; ++j) {
         world_coords[j] = model->vert(i, j);
-        screen_coords[j] = world2screen(world_coords[j], width, height);
+        // round screen_coords to int to meet assumption
+        screen_coords[j] = (Vec3i) world2screen(world_coords[j]);
         uv_coords[j] = model->uv(i, j);
-    }
-    // CCW -> outside direction: normal = AB ^ AC
-    Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
-    normal.normalize();
-    float cos_theta = normal * (direct_light * -1.f);
-    // backculling return directly
-    if (cos_theta <= 0) {
-        return;
-    }
-    // round screen_coords to int to meet assumption
-    for (int j = 0; j < 3; ++j) {
-        screen_coords[j].x = float(int(screen_coords[j].x + 0.5));
-        screen_coords[j].y = float(int(screen_coords[j].y + 0.5));
-        screen_coords[j].z = float(int(screen_coords[j].z + 0.5));
+        normals[j] = model->normal(i, j);
     }
     // find bounding box of a triangle
     Vec2f bboxmin(image.width() - 1, image.height() - 1);
     Vec2f bboxmax(0, 0);
-    for (int i = 0; i < 3; ++i) {
-        bboxmin.x = std::max(0.f, std::min(bboxmin.x, screen_coords[i].x));
-        bboxmin.y = std::max(0.f, std::min(bboxmin.y, screen_coords[i].y));
-        bboxmax.x = std::min(image.width() - 1.f, std::max(bboxmax.x, screen_coords[i].x));
-        bboxmax.y = std::min(image.height() - 1.f, std::max(bboxmax.y, screen_coords[i].y));
+    for (int j = 0; j < 3; ++j) {
+        bboxmin.x = std::max(0.f, std::min(bboxmin.x, screen_coords[j].x));
+        bboxmin.y = std::max(0.f, std::min(bboxmin.y, screen_coords[j].y));
+        bboxmax.x = std::min(image.width() - 1.f, std::max(bboxmax.x, screen_coords[j].x));
+        bboxmax.y = std::min(image.height() - 1.f, std::max(bboxmax.y, screen_coords[j].y));
     }
     Vec3f P;
     for (P.y = bboxmin.y; P.y <= bboxmax.y; P.y++) {
@@ -141,7 +146,23 @@ void triangle(int i, float *zbuffer, TGAImage &image) {
             if (P.z > zbuffer[int(P.y * width + P.x)]) {
                 zbuffer[int(P.y * width + P.x)] = P.z;
                 Vec2f uv_P = uv_coords[0] * bary_coords.x + uv_coords[1] * bary_coords.y + uv_coords[2] * bary_coords.z;
-                image.set(P.x, P.y, model->get_color(uv_P) * cos_theta);
+                /*
+                 * Flat shading
+                 * Gouraud shading
+                 * Blinn-Phong shading
+                 */
+
+                Vec3f l = -1 * direct_light;
+
+                // Flat shading
+                // CCW -> outside direction: normal = AB ^ AC
+                Vec3f normal = (world_coords[1] - world_coords[0]) ^ (world_coords[2] - world_coords[0]);
+                normal.normalize();
+                float cos_theta = l * normal;
+
+                if (cos_theta >= 0.f) {
+                    image.set(P.x, P.y, model->sample_color(uv_P) * cos_theta);
+                }
             }
         }
     }
@@ -166,7 +187,7 @@ int main(int argc, char** argv) {
         triangle(i, zbuffer, image);
     }
 
-    image.write_tga_file("rasterization_perspective.tga");
+    image.write_tga_file("rasterization_moving_camera.tga");
 
     TGAImage zbimage(width, height, TGAImage::GRAYSCALE);
     // normalize depth, search for max and min valid depth

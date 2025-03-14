@@ -30,10 +30,10 @@ public:
     Vec3f normal(int iface, int nvert);
     Vec2f uv(int iface, int nvert);
     std::vector<int> face(int idx);
-    TGAColor get_color(Vec2f uv);
-    TGAColor get_color(int iface, int nvert);
-    Vec3f get_normal(Vec2f uv);
-    Vec3f get_normal(int iface, int nvert);
+    TGAColor sample_color(Vec2f uv);
+    TGAColor sample_color(int iface, int nvert);
+    Vec3f sample_normal(Vec2f uv);
+    Vec3f sample_normal(int iface, int nvert);
     const TGAImage& diffuse()  const { return diffusemap;  }
     const TGAImage& normal()  const { return normalmap;  }
 };
