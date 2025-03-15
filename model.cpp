@@ -59,6 +59,8 @@ Model::Model(const char *filename) : verts_(), faces_vert() {
     }
     std::cerr << "# v# " << nverts() << " f# "  << nfaces() << " vt# " << uvs_.size() << " vn# " << normals_.size() << std::endl;
     load_texture(filename, "_diffuse.tga", diffusemap);
+    load_texture(filename, "_nm.tga", normalmap);
+    load_texture(filename, "_spec.tga", specmap);
 }
 
 Model::~Model() {

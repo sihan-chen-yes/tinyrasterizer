@@ -18,7 +18,8 @@ private:
     std::vector<std::vector<int> > faces_uv;    // per face uv idx
     std::vector<std::vector<int> > faces_normal;// per face normal idx
     TGAImage diffusemap{};         // diffuse color texture
-    TGAImage normalmap{};          // normal map texture
+    TGAImage normalmap{};          // normal map
+    TGAImage specmap{};         // specular map
     void load_texture(const std::string filename, const std::string suffix, TGAImage &img);
 public:
     Model(const char *filename);
