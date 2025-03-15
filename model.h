@@ -27,16 +27,19 @@ public:
     int nverts();
     int nfaces();
     Vec3f vert(int i);
-    Vec3f vert(int iface, int nvert);
-    Vec3f normal(int iface, int nvert);
-    Vec2f uv(int iface, int nvert);
+    Vec3f vert(int iface, int jvert);
+    Vec3f normal(int iface, int jvert);
+    Vec2f uv(int iface, int jvert);
     std::vector<int> face(int idx);
     TGAColor sample_color(Vec2f uv);
-    TGAColor sample_color(int iface, int nvert);
+    TGAColor sample_color(int iface, int jvert);
     Vec3f sample_normal(Vec2f uv);
-    Vec3f sample_normal(int iface, int nvert);
+    Vec3f sample_normal(int iface, int jvert);
+    float sample_spec(Vec2f uv);
+    float sample_spec(int iface, int jvert);
     const TGAImage& diffuse()  const { return diffusemap;  }
     const TGAImage& normal()  const { return normalmap;  }
+    const TGAImage& spec()  const { return specmap;  }
 };
 
 

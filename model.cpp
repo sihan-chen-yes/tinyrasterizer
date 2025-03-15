@@ -95,6 +95,9 @@ Vec2f Model::uv(int iface, int jvert) {
 }
 
 TGAColor Model::sample_color(Vec2f uv) {
+    /*
+     * assuming uint8 [0, 255] as input range
+     */
     return diffusemap.get(uv.u * diffusemap.width(), uv.v * diffusemap.height());
 }
 
@@ -103,12 +106,27 @@ TGAColor Model::sample_color(int iface, int jvert) {
 }
 
 Vec3f Model::sample_normal(Vec2f uv) {
+    /*
+     * assuming uint8 [0, 255] as input range
+     */
     TGAColor c = normalmap.get(uv.u * normalmap.width(), uv.v * normalmap.height());
     return Vec3f (c[2], c[1], c[0]) * 2.f / 255.f - Vec3f (1, 1, 1).normalize();
 }
 
 Vec3f Model::sample_normal(int iface, int jvert) {
     return sample_normal(uv(iface, jvert));
+}
+
+float Model::sample_spec(Vec2f uv) {
+    /*
+     * assuming uint8 [0, 255] as input range
+     */
+    float spec = specmap.get(uv.u * specmap.width(), uv.v * specmap.height())[0];
+    return spec;
+}
+
+float Model::sample_spec(int iface, int jvert) {
+    return sample_spec(uv(iface, jvert));
 }
 
 void Model::load_texture(std::string filename, const std::string suffix, TGAImage &img) {

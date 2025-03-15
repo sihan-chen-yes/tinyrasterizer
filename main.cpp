@@ -4,6 +4,7 @@
 //
 
 #include <vector>
+#include <iostream>
 #include "tgaimage.h"
 #include "model.h"
 #include "geometry.h"
@@ -128,8 +129,14 @@ struct BlinnPhongShader: public IShader {
         normal.normalize();
         Vec3f l = uniform_M * direct_light;
         l.normalize();
-        float intensity = std::max(0.f, std::min(normal * l, 1.f));
-        color = model->sample_color(uv) * intensity;
+        // reflection direction
+        Vec3f r = (2 * (normal * l) * normal - l).normalize();
+        // v:[0, 0, 1] i.e. z axis direction of camera frame
+        // if <r, v> < 0 then spec component is zero
+        float spec = std::pow(std::max(r.z, 0.f), model->sample_spec(uv));
+        float diff = std::max(0.f, std::min(normal * l, 1.f));
+        // final color = ambient + diffuse + component
+        color = TGAColor(5, 5, 5) + model->sample_color(uv) * (0.6 * diff + 0.4 * spec);
         // not discard
         return false;
     }
