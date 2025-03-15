@@ -103,8 +103,8 @@ TGAColor Model::sample_color(int iface, int jvert) {
 }
 
 Vec3f Model::sample_normal(Vec2f uv) {
-    TGAColor c = normalmap.get(uv.u * diffusemap.width(), uv.v * diffusemap.height());
-    return Vec3f (c[2], c[1], c[0]) * 2.f / 255.f - Vec3f (1, 1, 1);
+    TGAColor c = normalmap.get(uv.u * normalmap.width(), uv.v * normalmap.height());
+    return Vec3f (c[2], c[1], c[0]) * 2.f / 255.f - Vec3f (1, 1, 1).normalize();
 }
 
 Vec3f Model::sample_normal(int iface, int jvert) {

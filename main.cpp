@@ -4,8 +4,6 @@
 //
 
 #include <vector>
-#include <cmath>
-#include <iostream>
 #include "tgaimage.h"
 #include "model.h"
 #include "geometry.h"
@@ -28,12 +26,20 @@ struct ToonShader: public IShader {
      */
     Vec3f varying_intensity;
 
+    Matrix uniform_M;
+    Matrix uniform_M_T_inv;
+
     Vec4f vertex(int iface, int jvert) override {
         Vec4f gl_vertex = to_homogeneous(model->vert(iface, jvert));
         // vertex transformation
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
+        Vec3f normal = model->normal(iface, jvert);
+        normal = uniform_M_T_inv * normal;
+        normal.normalize();
+        Vec3f l = uniform_M * direct_light;
+        l.normalize();
         // ensure cos_theta gt 0
-        varying_intensity[jvert] = std::max(0.f, model->normal(iface, jvert) * direct_light);
+        varying_intensity[jvert] = std::max(0.f, std::min(normal * l, 1.f));
         return gl_vertex;
     }
 
@@ -62,12 +68,21 @@ struct GouraudShader: public IShader {
     Vec3f varying_intensity;
     Vec2f varying_uvs[3];
 
+    Matrix uniform_M;
+    Matrix uniform_M_T_inv;
+
     Vec4f vertex(int iface, int jvert) override {
         Vec4f gl_vertex = to_homogeneous(model->vert(iface, jvert));
         // vertex transformation
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         // ensure cos_theta gt 0
-        varying_intensity[jvert] = std::max(0.f, model->normal(iface, jvert) * direct_light);
+        Vec3f normal = model->sample_normal(iface, jvert);
+//        Vec3f normal = model->normal(iface, jvert);
+        normal = uniform_M_T_inv * normal;
+        normal.normalize();
+        Vec3f l = uniform_M * direct_light;
+        l.normalize();
+        varying_intensity[jvert] = std::max(0.f, std::min(normal * l, 1.f));
         varying_uvs[jvert] = model->uv(iface, jvert);
         return gl_vertex;
     }
@@ -87,24 +102,33 @@ struct BlinnPhongShader: public IShader {
      * refresh for each triangle face
      * written by vertex shader, read by fragment shader
      */
-    Vec3f varying_normals[3];
     Vec2f varying_uvs[3];
+    Vec3f varying_normals[3];
+
+    Matrix uniform_M;
+    Matrix uniform_M_T_inv;
 
     Vec4f vertex(int iface, int jvert) override {
         Vec4f gl_vertex = to_homogeneous(model->vert(iface, jvert));
         // vertex transformation
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         // ensure cos_theta gt 0
-        varying_normals[jvert] = model->normal(iface, jvert);
         varying_uvs[jvert] = model->uv(iface, jvert);
+        varying_normals[jvert] = model->normal(iface, jvert);
         return gl_vertex;
     }
 
     bool fragment(Vec3f bary_coords, TGAColor &color) override {
         // normal interpolation
-        Vec3f normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
         Vec2f uv = varying_uvs[0] * bary_coords[0] + varying_uvs[1] * bary_coords[1] + varying_uvs[2] * bary_coords[2];
-        float intensity = std::max(0.f, normal * direct_light);
+        Vec3f normal = model->sample_normal(uv);
+        // wo normal map
+//        Vec3f normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
+        normal = uniform_M_T_inv * normal;
+        normal.normalize();
+        Vec3f l = uniform_M * direct_light;
+        l.normalize();
+        float intensity = std::max(0.f, std::min(normal * l, 1.f));
         color = model->sample_color(uv) * intensity;
         // not discard
         return false;
@@ -127,6 +151,9 @@ int main(int argc, char** argv) {
     // zbuffer for min depth recording
     TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
     BlinnPhongShader shader;
+
+    shader.uniform_M = Projection * ModelView;
+    shader.uniform_M_T_inv = (Projection * ModelView).transpose().inverse();
 
     for (int i = 0; i < model->nfaces(); ++i) {
         Vec4f screen_coords[3];
