@@ -25,7 +25,10 @@ set(SOURCES main.cpp tgaimage.cpp
         model.cpp
         model.h
         geometry.h
-        geomery.cpp)
+        geomery.cpp
+        our_gl.cpp
+        our_gl.h
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)

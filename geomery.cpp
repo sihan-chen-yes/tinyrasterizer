@@ -7,14 +7,39 @@
 #include <iostream>
 #include "geometry.h"
 
+template <> template <> Vec2<int>::Vec2(const Vec2<float> &v) : x(int(v.x+.5)), y(int(v.y+.5)) {}
+template <> template <> Vec2<float>::Vec2(const Vec2<int> &v) : x(v.x), y(v.y) {}
+
 template <> Vec3<float>::Vec3(Matrix m) : x(m[0][0]/m[3][0]), y(m[1][0]/m[3][0]), z(m[2][0]/m[3][0]) {}
 template <> template <> Vec3<int>::Vec3(const Vec3<float> &v) : x(int(v.x+.5)), y(int(v.y+.5)), z(int(v.z+.5)) {}
 template <> template <> Vec3<float>::Vec3(const Vec3<int> &v) : x(v.x), y(v.y), z(v.z) {}
+template <> template <> Vec4<int>::Vec4(const Vec4<float> &v) : x(int(v.x+.5)), y(int(v.y+.5)), z(int(v.z+.5)), w(int(v.w+.5)) {}
+template <> template <> Vec4<float>::Vec4(const Vec4<int> &v) : x(v.x), y(v.y), z(v.z), w(v.w){}
 
-Matrix::Matrix(Vec3f v) : m(std::vector<std::vector<float> >(4, std::vector<float>(1, 1.f))), rows(4), cols(1) {
+template<> Vec3<float> to_cartesian(const Vec4<float> &v) {return Vec3<float>(v.x / v.w, v.y / v.w, v.z / v.w); }
+template<> Vec4<float> to_homogeneous(const Vec3<float> &v) {return Vec4<float>(v.x, v.y, v.z, 1.0f); }
+
+template <>
+Matrix::Matrix(Vec3<float> v) : m(std::vector<std::vector<float> >(4, std::vector<float>(1, 1.f))), rows(4), cols(1) {
     m[0][0] = v.x;
     m[1][0] = v.y;
     m[2][0] = v.z;
+}
+
+template <>
+Matrix::Matrix(Vec4<float> v) : m(std::vector<std::vector<float> >(4, std::vector<float>(1, 1.f))), rows(4), cols(1) {
+    m[0][0] = v.x;
+    m[1][0] = v.y;
+    m[2][0] = v.z;
+    m[3][0] = v.w;
+}
+
+template <>
+Vec4<float>::Vec4(Matrix m) {
+    x = m[0][0];
+    y = m[1][0];
+    z = m[2][0];
+    w = m[3][0];
 }
 
 Matrix::Matrix(int r, int c): m(std::vector<std::vector<float>>(r, std::vector<float>(c, 0.f))), rows(r), cols(c) { }

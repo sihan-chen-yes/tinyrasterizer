@@ -59,7 +59,6 @@ Model::Model(const char *filename) : verts_(), faces_vert() {
     }
     std::cerr << "# v# " << nverts() << " f# "  << nfaces() << " vt# " << uvs_.size() << " vn# " << normals_.size() << std::endl;
     load_texture(filename, "_diffuse.tga", diffusemap);
-    diffusemap.write_tga_file("d.tga");
 }
 
 Model::~Model() {
@@ -81,24 +80,24 @@ Vec3f Model::vert(int i) {
     return verts_[i];
 }
 
-Vec3f Model::vert(int iface, int nvert) {
-    return verts_[faces_vert[iface][nvert]];
+Vec3f Model::vert(int iface, int jvert) {
+    return verts_[faces_vert[iface][jvert]];
 }
 
-Vec3f Model::normal(int iface, int nvert) {
-    return normals_[faces_normal[iface][nvert]];
+Vec3f Model::normal(int iface, int jvert) {
+    return normals_[faces_normal[iface][jvert]];
 }
 
-Vec2f Model::uv(int iface, int nvert) {
-    return uvs_[faces_uv[iface][nvert]];
+Vec2f Model::uv(int iface, int jvert) {
+    return uvs_[faces_uv[iface][jvert]];
 }
 
 TGAColor Model::sample_color(Vec2f uv) {
     return diffusemap.get(uv.u * diffusemap.width(), uv.v * diffusemap.height());
 }
 
-TGAColor Model::sample_color(int iface, int nvert) {
-    return sample_color(uv(iface, nvert));
+TGAColor Model::sample_color(int iface, int jvert) {
+    return sample_color(uv(iface, jvert));
 }
 
 Vec3f Model::sample_normal(Vec2f uv) {
@@ -106,8 +105,8 @@ Vec3f Model::sample_normal(Vec2f uv) {
     return Vec3f (c[2], c[1], c[0]) * 2.f / 255.f - Vec3f (1, 1, 1);
 }
 
-Vec3f Model::sample_normal(int iface, int nvert) {
-    return sample_normal(uv(iface, nvert));
+Vec3f Model::sample_normal(int iface, int jvert) {
+    return sample_normal(uv(iface, jvert));
 }
 
 void Model::load_texture(std::string filename, const std::string suffix, TGAImage &img) {

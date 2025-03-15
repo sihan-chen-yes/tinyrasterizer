@@ -32,11 +32,16 @@ struct TGAColor {
     std::uint8_t bytespp = 4; // bytes per pixel
     std::uint8_t& operator[](const int i) { return bgra[i]; }
     TGAColor operator *(float f)  { return TGAColor(bgra[2] * f, bgra[1] * f, bgra[0] * f); }
+    TGAColor operator *(Vec3f f)  { return *this * (f[0] + f[1] + f[2]); }
     TGAColor operator +(TGAColor c)  { return TGAColor(bgra[2] + c[2], bgra[1] + c[1], bgra[0] + c[0]); }
 
     TGAColor() {}
     TGAColor(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255, std::uint8_t bpp = 4)
             : bgra{b, g, r, a}, bytespp(bpp) {
+    }
+    TGAColor(unsigned char v) : bgra(), bytespp(1) {
+        for (int i=0; i<4; i++) bgra[i] = 0;
+        bgra[0] = v;
     }
 
 };
