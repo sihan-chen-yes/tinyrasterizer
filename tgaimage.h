@@ -121,6 +121,7 @@ struct TGAImage {
     void set(const int x, const int y, const TGAColor &c);
     int width()  const;
     int height() const;
+    bool is_valid() const;
 private:
     bool   load_rle_data(std::ifstream &in); //decompression
     bool unload_rle_data(std::ofstream &out) const; //compression

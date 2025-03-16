@@ -60,6 +60,7 @@ Model::Model(const char *filename) : verts_(), faces_vert() {
     std::cerr << "# v# " << nverts() << " f# "  << nfaces() << " vt# " << uvs_.size() << " vn# " << normals_.size() << std::endl;
     load_texture(filename, "_diffuse.tga", diffusemap);
     load_texture(filename, "_nm.tga", normalmap);
+    load_texture(filename, "_nm_tangent.tga", tangent_normalmap);
     load_texture(filename, "_spec.tga", specmap);
 }
 
@@ -127,6 +128,19 @@ float Model::sample_spec(Vec2f uv) {
 
 float Model::sample_spec(int iface, int jvert) {
     return sample_spec(uv(iface, jvert));
+}
+
+Vec3f Model::sample_tangent_normal(Vec2f uv) {
+    /*
+     * assuming uint8 [0, 255] as input range
+     */
+    TGAColor c = tangent_normalmap.get(uv.u * tangent_normalmap.width(), uv.v * tangent_normalmap.height());
+    // noraml coords defined in local tangent space
+    return Vec3f (c[2], c[1], c[0]) * 2.f / 255.f - Vec3f (1, 1, 1);
+}
+
+Vec3f Model::sample_tangent_normal(int iface, int jvert) {
+    return sample_tangent_normal(uv(iface, jvert));
 }
 
 void Model::load_texture(std::string filename, const std::string suffix, TGAImage &img) {

@@ -20,6 +20,7 @@ private:
     TGAImage diffusemap{};         // diffuse color texture
     TGAImage normalmap{};          // normal map
     TGAImage specmap{};         // specular map
+    TGAImage tangent_normalmap{};         // normal map defined in tangent space
     void load_texture(const std::string filename, const std::string suffix, TGAImage &img);
 public:
     Model(const char *filename);
@@ -37,9 +38,12 @@ public:
     Vec3f sample_normal(int iface, int jvert);
     float sample_spec(Vec2f uv);
     float sample_spec(int iface, int jvert);
+    Vec3f sample_tangent_normal(Vec2f uv);
+    Vec3f sample_tangent_normal(int iface, int jvert);
     const TGAImage& diffuse()  const { return diffusemap;  }
     const TGAImage& normal()  const { return normalmap;  }
     const TGAImage& spec()  const { return specmap;  }
+    const TGAImage& tangent_normal()  const { return tangent_normalmap;  }
 };
 
 

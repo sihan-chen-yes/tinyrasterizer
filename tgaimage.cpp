@@ -220,3 +220,10 @@ int TGAImage::height() const {
     return h;
 }
 
+bool TGAImage::is_valid() const {
+    if (w <= 0 || h <= 0) return false;
+    if (!(bpp == GRAYSCALE || bpp == RGB || bpp == RGBA)) return false;
+    if (data.size() != static_cast<size_t>(w * h * bpp)) return false;
+
+    return true;
+}

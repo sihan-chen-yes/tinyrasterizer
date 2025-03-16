@@ -105,6 +105,7 @@ struct BlinnPhongShader: public IShader {
      */
     Vec2f varying_uvs[3];
     Vec3f varying_normals[3];
+    Vec3f varying_triangle_coords[3];
 
     Matrix uniform_M;
     Matrix uniform_M_T_inv;
@@ -116,18 +117,47 @@ struct BlinnPhongShader: public IShader {
         // ensure cos_theta gt 0
         varying_uvs[jvert] = model->uv(iface, jvert);
         varying_normals[jvert] = model->normal(iface, jvert);
+        varying_triangle_coords[jvert] = Vec3f(gl_vertex);
         return gl_vertex;
     }
 
     bool fragment(Vec3f bary_coords, TGAColor &color) override {
         // normal interpolation
         Vec2f uv = varying_uvs[0] * bary_coords[0] + varying_uvs[1] * bary_coords[1] + varying_uvs[2] * bary_coords[2];
-        Vec3f normal = model->sample_normal(uv);
+
+        Vec3f normal;
+        // normal computation
+        // prefer tangent space normal map
+        if (model->tangent_normal().is_valid()) {
+            Vec3f bary_normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
+            Matrix A(3, 3);
+            A.set_row(0, varying_triangle_coords[1] - varying_triangle_coords[0]);
+            A.set_row(1, varying_triangle_coords[2] - varying_triangle_coords[0]);
+            A.set_row(2, bary_normal);
+            Matrix A_inv = A.inverse();
+            Vec3f b_u = Vec3f(varying_uvs[1][0] - varying_uvs[0][0], varying_uvs[2][0] - varying_uvs[0][0], 0);
+            Vec3f b_v = Vec3f(varying_uvs[1][1] - varying_uvs[0][1], varying_uvs[2][1] - varying_uvs[0][1], 0);
+            Vec3f tangent = A_inv * b_u;
+            Vec3f bitangent = A_inv * b_v;
+            Matrix B(3, 3);
+            B.set_col(0, tangent.normalize());
+            B.set_col(1, bitangent.normalize());
+            B.set_col(2, bary_normal.normalize());
+            Vec3f coords = model->sample_tangent_normal(uv);
+            normal = B * coords;
+            normal.normalize();
+        } else if (model->normal().is_valid()) {
+            // then global space normal map
+            normal = model->sample_normal(uv);
+        } else {
+            // use interpolated normal directly
+            normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
+        }
+
         // wo normal map
-//        Vec3f normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
-        normal = uniform_M_T_inv * normal;
+        normal = uniform_M_T_inv * to_homogeneous(normal);
         normal.normalize();
-        Vec3f l = uniform_M * direct_light;
+        Vec3f l = uniform_M * to_homogeneous(direct_light);
         l.normalize();
         // reflection direction
         Vec3f r = (2 * (normal * l) * normal - l).normalize();
