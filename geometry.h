@@ -139,6 +139,9 @@ public:
     Matrix transpose();
     Matrix inverse();
 
+    void set_row(int i, Vec3f r);
+    void set_col(int j, Vec3f c);
+
     friend std::ostream& operator<<(std::ostream& s, Matrix& m);
 };
 
