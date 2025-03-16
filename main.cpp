@@ -27,7 +27,6 @@ struct ToonShader: public IShader {
      */
     Vec3f varying_intensity;
 
-    Matrix uniform_M;
     Matrix uniform_M_T_inv;
 
     Vec4f vertex(int iface, int jvert) override {
@@ -35,12 +34,10 @@ struct ToonShader: public IShader {
         // vertex transformation
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         Vec3f normal = model->normal(iface, jvert);
-        normal = uniform_M_T_inv * normal;
+        normal = uniform_M_T_inv * to_homogeneous(normal);
         normal.normalize();
-        Vec3f l = uniform_M * direct_light;
-        l.normalize();
         // ensure cos_theta gt 0
-        varying_intensity[jvert] = std::max(0.f, std::min(normal * l, 1.f));
+        varying_intensity[jvert] = std::max(0.f, std::min(normal * direct_light, 1.f));
         return gl_vertex;
     }
 
@@ -69,7 +66,6 @@ struct GouraudShader: public IShader {
     Vec3f varying_intensity;
     Vec2f varying_uvs[3];
 
-    Matrix uniform_M;
     Matrix uniform_M_T_inv;
 
     Vec4f vertex(int iface, int jvert) override {
@@ -79,11 +75,9 @@ struct GouraudShader: public IShader {
         // ensure cos_theta gt 0
         Vec3f normal = model->sample_normal(iface, jvert);
 //        Vec3f normal = model->normal(iface, jvert);
-        normal = uniform_M_T_inv * normal;
+        normal = uniform_M_T_inv * to_homogeneous(normal);
         normal.normalize();
-        Vec3f l = uniform_M * direct_light;
-        l.normalize();
-        varying_intensity[jvert] = std::max(0.f, std::min(normal * l, 1.f));
+        varying_intensity[jvert] = std::max(0.f, std::min(normal * direct_light, 1.f));
         varying_uvs[jvert] = model->uv(iface, jvert);
         return gl_vertex;
     }
@@ -107,7 +101,6 @@ struct BlinnPhongShader: public IShader {
     Vec3f varying_normals[3];
     Vec3f varying_triangle_coords[3];
 
-    Matrix uniform_M;
     Matrix uniform_M_T_inv;
 
     Vec4f vertex(int iface, int jvert) override {
@@ -116,7 +109,8 @@ struct BlinnPhongShader: public IShader {
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         // ensure cos_theta gt 0
         varying_uvs[jvert] = model->uv(iface, jvert);
-        varying_normals[jvert] = model->normal(iface, jvert);
+        varying_normals[jvert] = uniform_M_T_inv * to_homogeneous(model->normal(iface, jvert));
+        varying_normals[jvert].normalize();
         varying_triangle_coords[jvert] = Vec3f(gl_vertex);
         return gl_vertex;
     }
@@ -154,17 +148,12 @@ struct BlinnPhongShader: public IShader {
             normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
         }
 
-        // wo normal map
-        normal = uniform_M_T_inv * to_homogeneous(normal);
-        normal.normalize();
-        Vec3f l = uniform_M * to_homogeneous(direct_light);
-        l.normalize();
         // reflection direction
-        Vec3f r = (2 * (normal * l) * normal - l).normalize();
+        Vec3f r = (2 * (normal * direct_light) * normal - direct_light).normalize();
         // v:[0, 0, 1] i.e. z axis direction of camera frame
         // if <r, v> < 0 then spec component is zero
         float spec = std::pow(std::max(r.z, 0.f), model->sample_spec(uv));
-        float diff = std::max(0.f, std::min(normal * l, 1.f));
+        float diff = std::max(0.f, std::min(normal * direct_light, 1.f));
         // final color = ambient + diffuse + component
         color = TGAColor(5, 5, 5) + model->sample_color(uv) * (0.6 * diff + 0.4 * spec);
         // not discard
@@ -189,7 +178,9 @@ int main(int argc, char** argv) {
     TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
     BlinnPhongShader shader;
 
-    shader.uniform_M = Projection * ModelView;
+    Matrix uniform_M = Projection * ModelView;
+    direct_light = uniform_M * to_homogeneous(direct_light);
+    direct_light.normalize();
     shader.uniform_M_T_inv = (Projection * ModelView).transpose().inverse();
 
     for (int i = 0; i < model->nfaces(); ++i) {
