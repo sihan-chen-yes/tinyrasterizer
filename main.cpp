@@ -73,8 +73,8 @@ struct GouraudShader: public IShader {
         // vertex transformation
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         // ensure cos_theta gt 0
-        Vec3f normal = model->sample_normal(iface, jvert);
-//        Vec3f normal = model->normal(iface, jvert);
+//        Vec3f normal = model->sample_normal(iface, jvert);
+        Vec3f normal = model->normal(iface, jvert);
         normal = uniform_M_T_inv * to_homogeneous(normal);
         normal.normalize();
         varying_intensity[jvert] = std::max(0.f, std::min(normal * direct_light, 1.f));
@@ -109,9 +109,9 @@ struct BlinnPhongShader: public IShader {
         gl_vertex = Viewport * Projection * ModelView * gl_vertex;
         // ensure cos_theta gt 0
         varying_uvs[jvert] = model->uv(iface, jvert);
-        varying_normals[jvert] = uniform_M_T_inv * to_homogeneous(model->normal(iface, jvert));
-        varying_normals[jvert].normalize();
-        varying_triangle_coords[jvert] = Vec3f(gl_vertex);
+        // to camera frame
+        varying_normals[jvert] = ModelView * to_homogeneous(model->normal(iface, jvert));
+        varying_triangle_coords[jvert] = ModelView * to_homogeneous(model->vert(iface, jvert));
         return gl_vertex;
     }
 
@@ -138,24 +138,37 @@ struct BlinnPhongShader: public IShader {
             B.set_col(1, bitangent.normalize());
             B.set_col(2, bary_normal.normalize());
             Vec3f coords = model->sample_tangent_normal(uv);
+            // within camera frame
             normal = B * coords;
             normal.normalize();
         } else if (model->normal().is_valid()) {
             // then global space normal map
             normal = model->sample_normal(uv);
+            // transform to camera frame
+            normal = uniform_M_T_inv * to_homogeneous(normal);
+            normal.normalize();
         } else {
+            // within camera frame
             // use interpolated normal directly
             normal = varying_normals[0] * bary_coords[0] + varying_normals[1] * bary_coords[1] + varying_normals[2] * bary_coords[2];
+            normal.normalize();
         }
 
-        // reflection direction
-        Vec3f r = (2 * (normal * direct_light) * normal - direct_light).normalize();
-        // v:[0, 0, 1] i.e. z axis direction of camera frame
-        // if <r, v> < 0 then spec component is zero
-        float spec = std::pow(std::max(r.z, 0.f), model->sample_spec(uv));
+        float spec_ratio = 0.f;
+        float spec = 0.f;
+        if (model->spec().is_valid()) {
+            // heuristic
+            spec_ratio = 0.4;
+            // reflection direction
+            Vec3f r = (2 * (normal * direct_light) * normal - direct_light).normalize();
+            // v:[0, 0, 1] i.e. z axis direction of camera frame
+            // if <r, v> < 0 then spec component is zero
+            spec = std::pow(std::max(r.z, 0.f), model->sample_spec(uv));
+        }
+
         float diff = std::max(0.f, std::min(normal * direct_light, 1.f));
         // final color = ambient + diffuse + component
-        color = TGAColor(5, 5, 5) + model->sample_color(uv) * (0.6 * diff + 0.4 * spec);
+        color = TGAColor(5, 5, 5) + model->sample_color(uv) * ((1 - spec_ratio) * diff + spec_ratio * spec);
         // not discard
         return false;
     }
@@ -178,10 +191,10 @@ int main(int argc, char** argv) {
     TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
     BlinnPhongShader shader;
 
-    Matrix uniform_M = Projection * ModelView;
+    Matrix uniform_M = ModelView;
     direct_light = uniform_M * to_homogeneous(direct_light);
     direct_light.normalize();
-    shader.uniform_M_T_inv = (Projection * ModelView).transpose().inverse();
+    shader.uniform_M_T_inv = ModelView.transpose().inverse();
 
     for (int i = 0; i < model->nfaces(); ++i) {
         Vec4f screen_coords[3];
