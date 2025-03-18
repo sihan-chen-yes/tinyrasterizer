@@ -56,16 +56,16 @@ void projection(float coeff) {
 void viewport(int x0, int y0, int w, int h) {
     /*
      * construct Viewport transformation matrix
-     * assuming depth normalized as [0, 255] for visualization
+     * assuming max_depth normalized as [0, 255] for visualization
      */
     Viewport = Matrix::identity(4);
     Viewport[0][3] = x0 + w / 2.f;
     Viewport[1][3] = y0 + h / 2.f;
-    Viewport[2][3] = 255.f / 2.f;
+    Viewport[2][3] = max_depth / 2.f;
 
     Viewport[0][0] = w / 2.f;
     Viewport[1][1] = h / 2.f;
-    Viewport[2][2] = 255.f / 2.f;
+    Viewport[2][2] = max_depth / 2.f;
 }
 
 Vec3f barycentric(Vec3f *pts, Vec2f P) {
@@ -84,7 +84,7 @@ Vec3f barycentric(Vec3f *pts, Vec2f P) {
 }
 
 // rasterizer, drawing triangles iterating bbox
-void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, TGAImage &zbuffer) {
+void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, float *zbuffer) {
     /*
      * rasterize i-th face from mesh
      * h_pts assumed to be processed by vertex shader already
@@ -110,15 +110,15 @@ void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, TGAImage &zbuffer)
     for (P.y = bboxmin.y; P.y <= bboxmax.y; P.y++) {
         for (P.x = bboxmin.x; P.x <= bboxmax.x ; P.x++) {
             Vec3f bary_coords = barycentric(pts, P);
-            // depth interpolation
+            // max_depth interpolation
             float z = bary_coords.x * pts[0].z + bary_coords.y * pts[1].z + bary_coords.z * pts[2].z;
             // truncate to uint8
-            int depth = std::max(0, std::min(255, int(z + 0.5)));
+            float depth = std::max(0.f, z);
             // pytorch3d frame like
-            if (bary_coords.x < 0. || bary_coords.y < 0. || bary_coords.z < 0. || zbuffer.get(P.x, P.y)[0] > depth) continue;
+            if (bary_coords.x < 0. || bary_coords.y < 0. || bary_coords.z < 0. || zbuffer[P.x + P.y * image.width()] > depth) continue;
             bool discard = shader.fragment(bary_coords, color);
             if (!discard) {
-                zbuffer.set(P.x, P.y, TGAColor(depth));
+                zbuffer[P.x + P.y * image.width()] = depth;
                 image.set(P.x, P.y, color);
             }
         }

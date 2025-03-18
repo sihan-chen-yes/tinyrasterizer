@@ -11,6 +11,8 @@
 #include "our_gl.h"
 
 Model *model = NULL;
+// for shadow mapping
+float *shadowbuffer = NULL;
 // directional light, assuming away from evaluation point
 Vec3f direct_light = Vec3f(1, 1, 1).normalize();
 const int width  = 800;
@@ -102,6 +104,7 @@ struct BlinnPhongShader: public IShader {
     Vec3f varying_triangle_coords[3];
 
     Matrix uniform_M_T_inv;
+    Matrix uniform_M_shadow;
 
     Vec4f vertex(int iface, int jvert) override {
         Vec4f gl_vertex = to_homogeneous(model->vert(iface, jvert));
@@ -154,6 +157,15 @@ struct BlinnPhongShader: public IShader {
             normal.normalize();
         }
 
+        float shadow = 1;
+        if (shadowbuffer != NULL) {
+            //shadow mapping
+            Vec3f p = varying_triangle_coords[0] * bary_coords[0] + varying_triangle_coords[1] * bary_coords[1] + varying_triangle_coords[2] * bary_coords[2];
+            Vec3f p_shadow = uniform_M_shadow * to_homogeneous(p);
+            int shadow_map_idx = int(p_shadow[0] + 0.5) + width * int(p_shadow[1] + 0.5);
+            shadow = 0.3 + 0.7 * (shadowbuffer[shadow_map_idx] < p_shadow[2] + 50);
+        }
+
         float spec_ratio = 0.f;
         float spec = 0.f;
         if (model->spec().is_valid()) {
@@ -168,8 +180,27 @@ struct BlinnPhongShader: public IShader {
 
         float diff = std::max(0.f, std::min(normal * direct_light, 1.f));
         // final color = ambient + diffuse + component
-        color = TGAColor(5, 5, 5) + model->sample_color(uv) * ((1 - spec_ratio) * diff + spec_ratio * spec);
+        color = TGAColor(5, 5, 5) + model->sample_color(uv) * ((1 - spec_ratio) * diff + spec_ratio * spec) * shadow;
         // not discard
+        return false;
+    }
+};
+
+struct DepthShader : public IShader {
+    Vec3f varying_screen_coords[3];
+
+    Vec4f vertex(int iface, int jvert) override {
+        Vec4f gl_vertex = to_homogeneous(model->vert(iface, jvert));
+        // vertex transformation
+        gl_vertex = Viewport * Projection * ModelView * gl_vertex;
+        // ensure cos_theta gt 0
+        varying_screen_coords[jvert] = Vec3f (gl_vertex);
+        return gl_vertex;
+    }
+
+    virtual bool fragment(Vec3f bary_coords, TGAColor &color) {
+        Vec3f p = varying_screen_coords[0] * bary_coords[0] + varying_screen_coords[1] * bary_coords[1] + varying_screen_coords[2] * bary_coords[2];
+        color = TGAColor(255, 255, 255) * (p.z / max_depth);
         return false;
     }
 };
@@ -181,20 +212,50 @@ int main(int argc, char** argv) {
         model = new Model("obj/african_head.obj");
     }
 
+    // two-pass shadow mapping
+    // depth buffer initialization
+    float *zbuffer = new float[width * height];
+    shadowbuffer = new float[width * height];
+    // the bigger the closer to camera
+    for (int i = 0; i < width * height; ++i) {
+        zbuffer[i] = -std::numeric_limits<float>::max();
+        shadowbuffer[i] = -std::numeric_limits<float>::max();
+    }
+    // first pass to generate depth map
+    TGAImage depth(width, height, TGAImage::RGB);
+    // MVPV setting from light source
+    lookat(direct_light, center, up);
+    viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
+    projection(0);
+    DepthShader depthshader;
+    for (int i = 0; i < model->nfaces(); ++i) {
+        Vec4f screen_coords[3];
+        for (int j = 0; j < 3; ++j) {
+            screen_coords[j] = depthshader.vertex(i, j);
+        }
+        triangle(screen_coords, depthshader, depth, shadowbuffer);
+
+    }
+    depth.write_tga_file("depth.tga");
+    // transformation to shadow mapping camera screen coords
+    Matrix M = Viewport * Projection * ModelView;
+
+    // second pass for rasterization
     // MVPV setting
     lookat(eye, center, up);
     projection(-1.f / (eye - center).norm());
     viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
 
-    TGAImage image  (width, height, TGAImage::RGB);
+    TGAImage image (width, height, TGAImage::RGB);
     // zbuffer for min depth recording
-    TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
     BlinnPhongShader shader;
 
     Matrix uniform_M = ModelView;
+    direct_light = direct_light.normalize();
     direct_light = uniform_M * to_homogeneous(direct_light);
     direct_light.normalize();
     shader.uniform_M_T_inv = ModelView.transpose().inverse();
+    shader.uniform_M_shadow = M * ModelView.inverse();
 
     for (int i = 0; i < model->nfaces(); ++i) {
         Vec4f screen_coords[3];
@@ -204,9 +265,10 @@ int main(int argc, char** argv) {
         triangle(screen_coords, shader, image, zbuffer);
     }
 
-    image.write_tga_file("shader_test.tga");
-    zbuffer.write_tga_file("zbuffer_debug.tga");
+    image.write_tga_file("shader.tga");
 
     delete model;
+    delete [] shadowbuffer;
+    delete [] zbuffer;
     return 0;
 }
