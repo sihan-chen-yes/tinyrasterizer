@@ -41,7 +41,8 @@ struct TGAColor {
         if (valid_range(R, G, B)) {
             return TGAColor(R, G, B, bgra[3]);
         } else {
-            std::cerr << "[Warn] color clamped to [0..255] in operator*()\n";
+            std::cerr << "[Warn] color clamped to [0..255] in operator*(), "
+                      << "R: " << R << " G: " << G << " B: " << B << std::endl;
             R = std::clamp<float>(R, 0, 255);
             G = std::clamp<float>(G, 0, 255);
             B = std::clamp<float>(B, 0, 255);
@@ -57,7 +58,8 @@ struct TGAColor {
         if (valid_range(R, G, B)) {
             return TGAColor(R, G, B, bgra[3]);
         } else {
-            std::cerr << "[Warn] color clamped to [0..255] in operator*()\n";
+            std::cerr << "[Warn] color clamped to [0..255] in operator*(), "
+                      << "R: " << R << " G: " << G << " B: " << B << std::endl;
             R = std::clamp<float>(R, 0, 255);
             G = std::clamp<float>(G, 0, 255);
             B = std::clamp<float>(B, 0, 255);
@@ -73,7 +75,8 @@ struct TGAColor {
         if (valid_range(R, G, B)) {
             return TGAColor(R, G, B, bgra[3]);
         } else {
-            std::cerr << "[Warn] color clamped to 255 in operator+()\n";
+            std::cerr << "[Warn] color clamped to [0..255] in operator+(), "
+                      << "R: " << R << " G: " << G << " B: " << B << std::endl;
             R = std::clamp(R, 0, 255);
             G = std::clamp(G, 0, 255);
             B = std::clamp(B, 0, 255);

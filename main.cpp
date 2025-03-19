@@ -174,8 +174,9 @@ struct BlinnPhongShader: public IShader {
             // reflection direction
             Vec3f r = (2 * (normal * direct_light) * normal - direct_light).normalize();
             // v:[0, 0, 1] i.e. z axis direction of camera frame
-            // if <r, v> < 0 then spec component is zero
-            spec = std::pow(std::max(r.z, 0.f), model->sample_spec(uv));
+            // if <r, v> lt 0 then spec component is zero
+            // specular exponent should ge 1
+            spec = std::pow(std::max(r.z, 0.f), std::max<float> (1, model->sample_spec(uv)));
         }
 
         float diff = std::max(0.f, std::min(normal * direct_light, 1.f));
@@ -200,7 +201,8 @@ struct DepthShader : public IShader {
 
     virtual bool fragment(Vec3f bary_coords, TGAColor &color) {
         Vec3f p = varying_screen_coords[0] * bary_coords[0] + varying_screen_coords[1] * bary_coords[1] + varying_screen_coords[2] * bary_coords[2];
-        color = TGAColor(255, 255, 255) * (p.z / max_depth);
+        float depth = std::max(p.z, 0.f);
+        color = TGAColor(255, 255, 255) * (depth / max_depth);
         return false;
     }
 };
