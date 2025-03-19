@@ -17,10 +17,16 @@ float *shadowbuffer = NULL;
 Vec3f direct_light = Vec3f(1, 1, 1).normalize();
 const int width  = 800;
 const int height = 800;
+TGAImage ambient_occlusion(width, height, TGAImage::RGB);
+
 // camera location
-Vec3f eye(1, 1, 3);
-Vec3f center(0, 0, 0);
-Vec3f up(0, 1, 0);
+//Vec3f eye(1, 1, 3);
+//Vec3f center(0, 0, 0);
+//Vec3f up(0, 1, 0);
+
+Vec3f eye(1.2,-.8,3);
+Vec3f center(0,0,0);
+Vec3f up(0,1,0);
 
 struct ToonShader: public IShader {
     /*
@@ -102,6 +108,7 @@ struct BlinnPhongShader: public IShader {
     Vec2f varying_uvs[3];
     Vec3f varying_normals[3];
     Vec3f varying_triangle_coords[3];
+    Vec3f varying_screen_coords[3];
 
     Matrix uniform_M_T_inv;
     Matrix uniform_M_shadow;
@@ -115,12 +122,14 @@ struct BlinnPhongShader: public IShader {
         // to camera frame
         varying_normals[jvert] = ModelView * to_homogeneous(model->normal(iface, jvert));
         varying_triangle_coords[jvert] = ModelView * to_homogeneous(model->vert(iface, jvert));
+        varying_screen_coords[jvert] = Viewport * Projection * ModelView * to_homogeneous(model->vert(iface, jvert));
         return gl_vertex;
     }
 
     bool fragment(Vec3f bary_coords, TGAColor &color) override {
         // normal interpolation
         Vec2f uv = varying_uvs[0] * bary_coords[0] + varying_uvs[1] * bary_coords[1] + varying_uvs[2] * bary_coords[2];
+        Vec3f p_screen = varying_screen_coords[0] * bary_coords[0] + varying_screen_coords[1] * bary_coords[1] + varying_screen_coords[2] * bary_coords[2];
 
         Vec3f normal;
         // normal computation
@@ -178,10 +187,16 @@ struct BlinnPhongShader: public IShader {
             // specular exponent should ge 1
             spec = std::pow(std::max(r.z, 0.f), std::max<float> (1, model->sample_spec(uv)));
         }
-
+        float diff_ratio = 0.6;
         float diff = std::max(0.f, std::min(normal * direct_light, 1.f));
         // final color = ambient + diffuse + component
-        color = TGAColor(5, 5, 5) + model->sample_color(uv) * ((1 - spec_ratio) * diff + spec_ratio * spec) * shadow;
+        // default ambient light
+        TGAColor ambient_light = TGAColor (100, 100, 100);
+        float amb_ratio = 0.01;
+        if (ambient_occlusion.is_valid()) {
+            ambient_light = ambient_occlusion.get(int(p_screen[0] + 0.5), int(p_screen[1] + 0.5));
+        }
+        color = ambient_light * amb_ratio + model->sample_color(uv) * (diff_ratio * diff + spec_ratio * spec) * shadow;
         // not discard
         return false;
     }
@@ -207,6 +222,24 @@ struct DepthShader : public IShader {
     }
 };
 
+float max_elevation_angle(float *zbuffer, Vec2f p, Vec2f dir) {
+    /*
+     * from p to search the height change along dir, in 2D plane
+     */
+    float max_angle = 0;
+    for (float t = 0.; t < 1000.; t+=1.) {
+        Vec2f cur = p + dir * t;
+        if (cur.x >= width || cur.x < 0 || cur.y >= height || cur.y < 0) return max_angle;
+        float distance = (p - cur).norm();
+        // ignore starting stage
+        if (distance < 1.f) continue;
+        float elevation = (zbuffer[int(cur.x + 0.5) + int(cur.y + 0.5) * width] - zbuffer[int(p.x + 0.5) + int(p.y + 0.5) * width]) / max_depth;
+        // slope
+        max_angle = std::max(max_angle, atanf(elevation / distance));
+    }
+    return max_angle;
+}
+
 int main(int argc, char** argv) {
     if (2 == argc) {
         model = new Model(argv[1]);
@@ -214,15 +247,54 @@ int main(int argc, char** argv) {
         model = new Model("obj/african_head.obj");
     }
 
+    // three-pass
+    // first pass for ambient occlusion
     // two-pass shadow mapping
     // depth buffer initialization
     float *zbuffer = new float[width * height];
     shadowbuffer = new float[width * height];
+    float *ambient_zbuffer = new float[width * height];
     // the bigger the closer to camera
     for (int i = 0; i < width * height; ++i) {
         zbuffer[i] = -std::numeric_limits<float>::max();
         shadowbuffer[i] = -std::numeric_limits<float>::max();
+        ambient_zbuffer[i] = -std::numeric_limits<float>::max();
     }
+
+    // screen based ambient occlusion pass
+    // MVPV setting
+    lookat(eye, center, up);
+    projection(-1.f / (eye - center).norm());
+    viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
+    DepthShader ambientshader;
+    for (int i = 0; i < model->nfaces(); ++i) {
+        Vec4f screen_coords[3];
+        for (int j = 0; j < 3; ++j) {
+            screen_coords[j] = ambientshader.vertex(i, j);
+        }
+        triangle(screen_coords, ambientshader, ambient_occlusion, ambient_zbuffer);
+    }
+
+    // prepare screen space ambient occlusion
+    for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+            // ignore background
+            if (ambient_zbuffer[x + y * width] < 0) continue;
+            float total = 0;
+            // 8 rays, step : PI / 4, wo repeating
+            for (float a = 0; a < M_PI * 2 - EPSILON; a += M_PI / 4) {
+                // the bigger angle, the more hidden, the less ambient light
+                total += M_PI / 2 - max_elevation_angle(ambient_zbuffer, Vec2f(x, y), Vec2f(cos(a), sin(a)));
+            }
+            // normalization to [0, 1]
+            total /= (M_PI / 2) * 8;
+            total = pow(total, 500);
+            ambient_occlusion.set(x, y, TGAColor(255, 255, 255) * total);
+        }
+    }
+
+    ambient_occlusion.write_tga_file("ambient_occlusion.tga");
+
     // first pass to generate depth map
     TGAImage depth(width, height, TGAImage::RGB);
     // MVPV setting from light source
@@ -272,5 +344,6 @@ int main(int argc, char** argv) {
     delete model;
     delete [] shadowbuffer;
     delete [] zbuffer;
+    delete [] ambient_zbuffer;
     return 0;
 }
