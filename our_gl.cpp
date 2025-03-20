@@ -6,6 +6,8 @@
 #include <limits>
 #include <cstdlib>
 #include "our_gl.h"
+#include "model.h"
+
 
 // Model-View-Projection-Viewport(MVPV) matrix
 Matrix ModelView;
@@ -83,7 +85,7 @@ Vec3f barycentric(Vec3f *pts, Vec2f P) {
     return Vec3f(1. - (n.x + n.y) / n.z, n.x / n.z, n.y / n.z);
 }
 
-// rasterizer, drawing triangles iterating bbox
+// rasterizer for each face, drawing triangles iterating bbox
 void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, float *zbuffer) {
     /*
      * rasterize i-th face from mesh
@@ -121,6 +123,20 @@ void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, float *zbuffer) {
                 zbuffer[P.x + P.y * image.width()] = depth;
                 image.set(P.x, P.y, color);
             }
+        }
+    }
+}
+
+// rasterization for calling, iterating all models
+void rasterize(std::vector<Model*> models, IShader &shader, TGAImage &image, float *zbuffer) {
+    for (int m = 0; m < models.size(); ++m) {
+        shader.model = models[m];
+        for (int i = 0; i < shader.model->nfaces(); ++i) {
+            Vec4f screen_coords[3];
+            for (int j = 0; j < 3; ++j) {
+                screen_coords[j] = shader.vertex(i, j);
+            }
+            triangle(screen_coords, shader, image, zbuffer);
         }
     }
 }

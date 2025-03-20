@@ -7,6 +7,7 @@
 
 #include "tgaimage.h"
 #include "geometry.h"
+#include "model.h"
 
 extern Matrix ModelView;
 extern Matrix Viewport;
@@ -18,10 +19,14 @@ void projection(float coeff=0.f); // coeff = -1/c
 void viewport(int x, int y, int w, int h);
 
 struct IShader {
+    Model *model = NULL;
+    float *shadowbuffer = NULL;
     virtual ~IShader();
     virtual Vec4f vertex(int iface, int jvert) = 0;
     virtual bool fragment(Vec3f bar, TGAColor &color) = 0;
 };
 
 void triangle(Vec4f *h_pts, IShader &shader, TGAImage &image, float *zbuffer);
+void rasterize(std::vector<Model*> models, IShader &shader, TGAImage &image, float *zbuffer);
+
 #endif //TINYRASTERIZER_OUR_GL_H

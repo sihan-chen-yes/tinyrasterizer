@@ -10,7 +10,7 @@
 #include "geometry.h"
 #include "our_gl.h"
 
-Model *model = NULL;
+std::vector<Model*> models;
 // for shadow mapping
 float *shadowbuffer = NULL;
 // directional light, assuming away from evaluation point
@@ -241,10 +241,14 @@ float max_elevation_angle(float *zbuffer, Vec2f p, Vec2f dir) {
 }
 
 int main(int argc, char** argv) {
-    if (2 == argc) {
-        model = new Model(argv[1]);
-    } else {
-        model = new Model("obj/african_head.obj");
+    if (2 > argc) {
+        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
+        return 1;
+    }
+
+    // save all models
+    for (int m = 1; m < argc; m++) {
+        models.push_back(new Model(argv[m]));
     }
 
     // three-pass
@@ -267,13 +271,8 @@ int main(int argc, char** argv) {
     projection(-1.f / (eye - center).norm());
     viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
     DepthShader ambientshader;
-    for (int i = 0; i < model->nfaces(); ++i) {
-        Vec4f screen_coords[3];
-        for (int j = 0; j < 3; ++j) {
-            screen_coords[j] = ambientshader.vertex(i, j);
-        }
-        triangle(screen_coords, ambientshader, ambient_occlusion, ambient_zbuffer);
-    }
+
+    rasterize(models, ambientshader, ambient_occlusion, ambient_zbuffer);
 
     // prepare screen space ambient occlusion
     for (int x = 0; x < width; ++x) {
@@ -302,14 +301,9 @@ int main(int argc, char** argv) {
     viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
     projection(0);
     DepthShader depthshader;
-    for (int i = 0; i < model->nfaces(); ++i) {
-        Vec4f screen_coords[3];
-        for (int j = 0; j < 3; ++j) {
-            screen_coords[j] = depthshader.vertex(i, j);
-        }
-        triangle(screen_coords, depthshader, depth, shadowbuffer);
 
-    }
+    rasterize(models, depthshader, depth, shadowbuffer);
+
     depth.write_tga_file("depth.tga");
     // transformation to shadow mapping camera screen coords
     Matrix M = Viewport * Projection * ModelView;
@@ -323,6 +317,7 @@ int main(int argc, char** argv) {
     TGAImage image (width, height, TGAImage::RGB);
     // zbuffer for min depth recording
     BlinnPhongShader shader;
+    shader.shadowbuffer = shadowbuffer;
 
     Matrix uniform_M = ModelView;
     direct_light = direct_light.normalize();
@@ -331,17 +326,12 @@ int main(int argc, char** argv) {
     shader.uniform_M_T_inv = ModelView.transpose().inverse();
     shader.uniform_M_shadow = M * ModelView.inverse();
 
-    for (int i = 0; i < model->nfaces(); ++i) {
-        Vec4f screen_coords[3];
-        for (int j = 0; j < 3; ++j) {
-            screen_coords[j] = shader.vertex(i, j);
-        }
-        triangle(screen_coords, shader, image, zbuffer);
-    }
-
+    rasterize(models, shader, image, zbuffer);
     image.write_tga_file("shader.tga");
 
-    delete model;
+    for (Model *model: models) {
+        delete model;
+    }
     delete [] shadowbuffer;
     delete [] zbuffer;
     delete [] ambient_zbuffer;
